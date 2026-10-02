@@ -14,3 +14,8 @@ data/*.db-*
 docs/slides/assets/asc/
 docs/slides/assets/*.zip
 docs/slides/assets/run.json
+
+# local secrets for docker run / compose
+.env
+.env.*
+!.env.example

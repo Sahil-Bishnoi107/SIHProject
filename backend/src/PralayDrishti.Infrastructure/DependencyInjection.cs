@@ -38,7 +38,8 @@ public static partial class DependencyInjection
         });
         services.AddHttpClient("overpass", c =>
         {
-            c.Timeout = TimeSpan.FromSeconds(120);
+            // per attempt; ExposureProvider falls through to mirrors, so a stuck instance must not eat the whole run
+            c.Timeout = TimeSpan.FromSeconds(60);
             c.DefaultRequestHeaders.UserAgent.ParseAdd("PralayDrishti/1.0 (dam-break decision support)");
         });
 

@@ -1,0 +1,59 @@
+# Run the complete app (dashboard + API + Postgres + Redis) from the production image.
+#
+#   docker compose up --build        -> http://localhost:8080
+#
+# For development with `dotnet run` + `npm run dev`, use docker-compose.dev.yml instead.
+
+# own project name: without it this file and docker-compose.dev.yml share the folder-derived name, both have a
+# "redis" service, and starting one replaces the other's container (the dev API then loses Redis on localhost:6379)
+name: pralaydrishti-prod
+
+services:
+  app:
+    build: .
+    image: ${IMAGE:-sihproject:1.0.0}
+    container_name: pralay-app
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://pralay:${POSTGRES_PASSWORD:-pralay}@db:5432/pralaydrishti?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      Jwt__Secret: ${JWT_SECRET:-local-only-secret-change-me-0123456789-abcdef}
+      Seed__DemoUsers__0__Password: ${DEMO_PASSWORD:-Demo@12345}
+      Seed__DemoUsers__1__Password: ${DEMO_PASSWORD:-Demo@12345}
+      Seed__DemoUsers__2__Password: ${DEMO_PASSWORD:-Demo@12345}
+    volumes:
+      - app-data:/app/data/runs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: pralaydrishti
+      POSTGRES_USER: pralay
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pralay}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pralay -d pralaydrishti"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+volumes:
+  app-data:
+  db-data:
+  redis-data:

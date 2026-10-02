@@ -1,0 +1,49 @@
+﻿# Render Blueprint - creates the web app, a Postgres database and a Redis (Key Value) instance and wires them together.
+# Render dashboard -> New -> Blueprint -> pick this repo. See docs/DEPLOYMENT.md.
+
+services:
+  - type: web
+    name: pralaydrishti
+    runtime: image
+    image:
+      url: docker.io/sahilbishnoi1/sihproject:1.0.0
+    plan: starter            # 'free' works but sleeps after 15 min idle and has 512 MB RAM
+    region: singapore
+    healthCheckPath: /health/live
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: pralaydrishti-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: pralaydrishti-redis
+          property: connectionString
+      - key: Jwt__Secret
+        generateValue: true          # random 256-bit value, generated once by Render
+      # demo accounts shown on the login page (admin / analyst / viewer @pralaydrishti.local)
+      - key: Seed__DemoUsers__0__Password
+        sync: false                  # Render asks you for the value on first deploy
+      - key: Seed__DemoUsers__1__Password
+        sync: false
+      - key: Seed__DemoUsers__2__Password
+        sync: false
+      # Render terminates TLS at its edge proxy; trust its X-Forwarded-* headers
+      - key: ForwardedHeaders__TrustAllProxies
+        value: "true"
+
+  - type: keyvalue
+    name: pralaydrishti-redis
+    plan: free
+    region: singapore
+    maxmemoryPolicy: noeviction      # Hangfire job data must never be evicted
+    ipAllowList: []                  # only reachable from services in this Render account
+
+databases:
+  - name: pralaydrishti-db
+    plan: free                       # free Render Postgres expires after 30 days - use basic-256mb to keep it
+    region: singapore
+    databaseName: pralaydrishti
+    user: pralay
+    ipAllowList: []

@@ -212,13 +212,40 @@ public sealed class ExposureProvider : IExposureProvider
 );
 out tags geom;
 """;
-            var client = _http.CreateClient("overpass");
-            using var resp = await client.PostAsync(_opt.OverpassUrl, new FormUrlEncodedContent(new Dictionary<string, string> { ["data"] = q }), ct);
-            resp.EnsureSuccessStatusCode();
-            json = await resp.Content.ReadAsStringAsync(ct);
+            json = await PostOverpassAsync(q, ct);
             await File.WriteAllTextAsync(cache, json, ct);
         }
         return ParseOverpass(json);
+    }
+
+    // The main public Overpass instance regularly answers 429/504 under load; a run without settlements reports
+    // "0 people at risk", which is worse than a slower answer. Same query, next public mirror.
+    private static readonly string[] OverpassMirrors =
+    {
+        "https://overpass.kumi.systems/api/interpreter",
+        "https://overpass.private.coffee/api/interpreter",
+    };
+
+    private async Task<string> PostOverpassAsync(string query, CancellationToken ct)
+    {
+        var client = _http.CreateClient("overpass");
+        var urls = new[] { _opt.OverpassUrl }.Concat(OverpassMirrors).Where(u => !string.IsNullOrWhiteSpace(u)).Distinct().ToList();
+        Exception? last = null;
+        foreach (string url in urls)
+        {
+            try
+            {
+                using var resp = await client.PostAsync(url, new FormUrlEncodedContent(new Dictionary<string, string> { ["data"] = query }), ct);
+                resp.EnsureSuccessStatusCode();
+                return await resp.Content.ReadAsStringAsync(ct);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                _log.LogWarning("Overpass {Url} failed ({Msg}), trying the next mirror", url, ex.Message);
+                last = ex;
+            }
+        }
+        throw last ?? new InvalidOperationException("No Overpass endpoint configured");
     }
 
     public static ExposureSet ParseOverpass(string json)

@@ -16,11 +16,19 @@ public static class WebApplicationExtensions
     {
         await app.Services.InitializeDatabaseAsync(app.Configuration);
 
-        // behind a load balancer / ingress: real client IP (stored on refresh tokens) and scheme
-        app.UseForwardedHeaders(new ForwardedHeadersOptions
+        // behind a load balancer / ingress: real client IP (stored on refresh tokens) and scheme.
+        // By default only a proxy on loopback is trusted; a managed platform's edge proxy (Render etc.) is not, so
+        // ForwardedHeaders:TrustAllProxies opts in - only for deployments where the container is never exposed directly.
+        var forwarded = new ForwardedHeadersOptions
         {
             ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-        });
+        };
+        if (app.Configuration.GetValue<bool>("ForwardedHeaders:TrustAllProxies"))
+        {
+            forwarded.KnownNetworks.Clear();
+            forwarded.KnownProxies.Clear();
+        }
+        app.UseForwardedHeaders(forwarded);
         app.UseMiddleware<ExceptionHandlingMiddleware>();
         app.UseSwagger();
         app.UseSwaggerUI(c => c.DocumentTitle = "PralayDrishti API");

@@ -1,0 +1,25 @@
+# keep the build context small and free of local state / secrets
+.git
+.github
+.vs
+.vscode
+**/bin
+**/obj
+**/node_modules
+frontend/dist
+frontend/*.tsbuildinfo
+backend/tests
+docs
+data/cache
+data/runs
+data/uploads
+data/models
+data/dem
+data/gee_outbox
+data/*.db*
+**/.env
+**/.env.*
+**/appsettings.Development.json
+Dockerfile
+docker-compose*.yml
+render.yaml
