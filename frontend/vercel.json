@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "npm ci",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://YOUR-RENDER-APP.onrender.com/api/:path*" },
+    { "source": "/hubs/:path*", "destination": "https://YOUR-RENDER-APP.onrender.com/hubs/:path*" },
+    { "source": "/wms", "destination": "https://YOUR-RENDER-APP.onrender.com/wms" },
+    { "source": "/swagger/:path*", "destination": "https://YOUR-RENDER-APP.onrender.com/swagger/:path*" }
+  ]
+}

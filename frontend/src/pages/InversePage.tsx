@@ -3,7 +3,8 @@ import type { Map as MlMap } from 'maplibre-gl'
 import { Crosshair, Loader2, Upload } from 'lucide-react'
 import { fmt, get, layerImage, post, RunDetail, RunSummary } from '../api'
 import { useCanSimulate, viewerHint } from '../auth'
-import MapView, { fitBounds, points, setGeoJson, setImage } from '../components/MapView'
+import MapView, { points, setGeoJson, setImage } from '../components/MapView'
+import Workspace from '../components/Workspace'
 import { Lines } from '../components/Charts'
 
 /**
@@ -47,14 +48,13 @@ export default function InversePage({ runId }: { runId?: string }) {
   useEffect(() => {
     const map = mapRef.current
     if (!mapReady || !map || !detail) return
-    fitBounds(map, detail.bounds)
     setImage(map, 'flood', layerImage(detail.summary.id, 'depth'), detail.bounds, 0.7)
   }, [detail, mapReady])
 
   useEffect(() => {
     const map = mapRef.current
     if (mapReady && map && target) setGeoJson(map, 'target', points([{ lon: target[0], lat: target[1] }]), [
-      { id: 'target', type: 'circle', paint: { 'circle-radius': 9, 'circle-color': '#ef4444', 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } },
+      { id: 'target', type: 'circle', paint: { 'circle-radius': 9, 'circle-color': '#dc2626', 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } },
     ])
   }, [target, mapReady])
 
@@ -85,27 +85,32 @@ export default function InversePage({ runId }: { runId?: string }) {
       setObserved(gj)
       const map = mapRef.current
       if (map) setGeoJson(map, 'observed', gj, [
-        { id: 'observed', type: 'line', paint: { 'line-color': '#f472b6', 'line-width': 2 } },
+        { id: 'observed', type: 'line', paint: { 'line-color': '#db2777', 'line-width': 2 } },
       ])
     } catch { setError('Not a valid GeoJSON file') }
   }
 
   return (
-    <div className="workspace">
-      <aside className="side">
-        <h1>Inverse / threshold queries</h1>
-        <div className="field">
-          <label htmlFor="run">Base scenario</label>
-          <select id="run" value={id} onChange={e => setId(e.target.value)}>
-            {runs.map(r => <option key={r.id} value={r.id}>{r.name} ({fmt.time(r.finishedUtc)})</option>)}
-          </select>
+    <Workspace side={<>
+        <div className="side-head">
+          <div>
+            <h1>Threshold queries</h1>
+            <div className="subtitle">Work backwards from a place or an observed flood to the release that causes it</div>
+          </div>
+          <div className="field">
+            <label htmlFor="run">Base scenario</label>
+            <select id="run" value={id} onChange={e => setId(e.target.value)} disabled={!runs.length}>
+              {runs.map(r => <option key={r.id} value={r.id}>{r.name} ({fmt.time(r.finishedUtc)})</option>)}
+            </select>
+          </div>
         </div>
-        {runs.length === 0 && <div className="empty">Run a simulation first.</div>}
+        <div className="side-body">
+        {runs.length === 0 && <div className="empty">No finished simulations yet. <a href="#/simulate">Run one first.</a></div>}
 
         <div className="card stack">
           <h2>How much release floods a target?</h2>
-          <p className="faint">Click the bridge / army camp / highway on the map. The flood model is re-run on a coarser grid with the release scaled, and a geometric bisection finds the smallest release that floods it.</p>
-          <div className="faint"><Crosshair size={12} /> {target ? `${target[1].toFixed(4)}, ${target[0].toFixed(4)}` : 'no target yet'}</div>
+          <p className="faint">Click a bridge, camp or highway on the map. The model re-runs on a coarser grid with the release scaled up and down to find the smallest release that floods it.</p>
+          <div className="faint row tight"><Crosshair size={12} aria-hidden /> {target ? <span className="num-t">{target[1].toFixed(4)}, {target[0].toFixed(4)}</span> : 'No target yet - click the map'}</div>
           <div className="fields">
             <div className="field"><label htmlFor="tn">Target name</label><input id="tn" type="text" value={targetName} onChange={e => setTargetName(e.target.value)} /></div>
             <div className="field"><label htmlFor="td">Critical depth (m)</label><input id="td" type="number" step={0.1} value={depth} onChange={e => setDepth(e.target.value)} /></div>
@@ -145,9 +150,11 @@ export default function InversePage({ runId }: { runId?: string }) {
             </div>
           )}
         </div>
-        {error && <div className="alert-box">{error}</div>}
-      </aside>
-      <MapView onReady={onReady} onClick={ll => setTarget([ll.lng, ll.lat])} />
-    </div>
+        {error && <div className="alert-box" role="alert">{error}</div>}
+        </div>
+      </>}>
+      <MapView onReady={onReady} onClick={ll => setTarget([ll.lng, ll.lat])} fitTo={detail?.bounds ?? null} initialBasemap="satellite"
+        hint={detail && !target ? 'Click the place you want to protect' : null} />
+    </Workspace>
   )
 }

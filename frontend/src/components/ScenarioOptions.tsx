@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, Zap } from 'lucide-react'
 import { ScenarioSpec } from '../api'
 
 type Props = { spec: ScenarioSpec; onChange: (s: ScenarioSpec) => void }
@@ -11,7 +11,17 @@ export default function ScenarioOptions({ spec, onChange }: Props) {
   const num = (v: string) => (v === '' ? 0 : Number(v))
 
   return (
-    <div className="card">
+    <div>
+      <div className="row spread" style={{ marginBottom: 8 }}>
+        <h3 style={{ margin: 0 }}>Simulation settings</h3>
+        <button type="button" className="btn small" onClick={() => onChange(quickSpec(spec))}
+          title="No SPH, 3 h, 40 km, coarser grid - finishes in a few minutes even on a small server">
+          <Zap size={13} aria-hidden /> Quick demo
+        </button>
+      </div>
+      {hosted && isQuick(spec) && (
+        <div className="faint" style={{ marginBottom: 8 }}>Quick settings are on so the run finishes in a few minutes on this server.</div>
+      )}
       <div className="fields">
         <div className="field">
           <label htmlFor="dur">Simulated duration (h)</label>
@@ -32,13 +42,16 @@ export default function ScenarioOptions({ spec, onChange }: Props) {
         </div>
       </div>
 
-      <label className="check" style={{ marginTop: 8 }}>
+      <label className="check" style={{ marginTop: 10 }}>
         <input type="checkbox" checked={spec.runSph} onChange={e => set({ runSph: e.target.checked })} />
-        SPH near field (breach zone, impact force, SPH vs SWE comparison)
+        <span>
+          Detailed breach-zone simulation (SPH)
+          <span className="faint" style={{ display: 'block' }}>Impact forces near the dam, SPH vs 2D comparison. Slower.</span>
+        </span>
       </label>
 
-      <button className="btn ghost small" onClick={() => setOpen(o => !o)} aria-expanded={open} style={{ marginTop: 4 }}>
-        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />} Advanced model settings
+      <button className="btn ghost small" onClick={() => setOpen(o => !o)} aria-expanded={open} style={{ marginTop: 6, marginLeft: -8 }}>
+        {open ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />} Advanced model settings
       </button>
 
       {open && (
@@ -88,7 +101,7 @@ export default function ScenarioOptions({ spec, onChange }: Props) {
           </div>
 
           {spec.runSph && (
-            <div className="card tight stack">
+            <div className="card flat tight stack">
               <h3>SPH near field</h3>
               <div className="fields">
                 <div className="field">
@@ -136,6 +149,25 @@ export default function ScenarioOptions({ spec, onChange }: Props) {
     </div>
   )
 }
+
+/** Settings that finish in a few minutes even on a small cloud instance (Render free has 0.1 CPU, 512 MB). */
+export const quickSpec = (s: ScenarioSpec): ScenarioSpec => ({
+  ...s,
+  runSph: false,
+  sphHandover: false,
+  ensembleMembers: 0,
+  // measured at 0.1 CPU (Render free) on Bhakra: ~4 min. Cost grows ~cells^1.5, so the grid is coarsened
+  // rather than the reach shortened - a 20 km reach often ends before the first village.
+  durationHours: Math.min(s.durationHours, 3),
+  downstreamKm: Math.min(s.downstreamKm, 40),
+  maxCells: Math.min(s.maxCells, 30000),
+  demZoom: 11,
+})
+
+/** Deployed copies start with the quick settings; running on the laptop keeps full quality. */
+export const hosted = !['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname)
+const isQuick = (s: ScenarioSpec) => !s.runSph && s.ensembleMembers === 0 && s.maxCells <= 30000
+export const initialSpec =(s: ScenarioSpec) => (hosted ? quickSpec(s) : s)
 
 export const defaultSpec = (): ScenarioSpec => ({
   name: 'Scenario',

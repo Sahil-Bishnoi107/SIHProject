@@ -5,6 +5,7 @@ import { fmt, get, post, upload } from '../api'
 import { useCanSimulate, viewerHint } from '../auth'
 import { useHub } from '../hub'
 import MapView, { points, setGeoJson } from '../components/MapView'
+import Workspace from '../components/Workspace'
 import { go } from '../App'
 
 type Lake = {
@@ -14,7 +15,9 @@ type Lake = {
 
 type Alert = { id: string; runId: string; createdUtc: string; headline: string; severity: string; status: string; populationAtRisk: number; firstArrivalMin: number | null; acknowledged: boolean }
 
-const stateColor: Record<string, string> = { New: 'blue', Estimating: 'amber', Simulating: 'amber', Alerted: 'red', Dismissed: 'gray', Failed: 'gray' }
+const HIMALAYA: [number, number, number, number] = [72.5, 26.5, 97, 36.5]
+
+const stateColor: Record<string, string> ={ New: 'blue', Estimating: 'amber', Simulating: 'amber', Alerted: 'red', Dismissed: 'gray', Failed: 'gray' }
 
 export default function LakeWatchPage() {
   const canSim = useCanSimulate()
@@ -40,8 +43,8 @@ export default function LakeWatchPage() {
     const map = mapRef.current
     if (!map) return
     setGeoJson(map, 'lakes', points(lakes.map(l => ({ lon: l.lon, lat: l.lat, props: { s: l.state } }))), [
-      { id: 'lakes-halo', type: 'circle', paint: { 'circle-radius': 14, 'circle-color': ['match', ['get', 's'], 'Alerted', '#ef4444', 'Simulating', '#f59e0b', '#3b82f6'], 'circle-opacity': 0.25 } },
-      { id: 'lakes', type: 'circle', paint: { 'circle-radius': 6, 'circle-color': ['match', ['get', 's'], 'Alerted', '#ef4444', 'Simulating', '#f59e0b', '#3b82f6'], 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5 } },
+      { id: 'lakes-halo', type: 'circle', paint: { 'circle-radius': 14, 'circle-color': ['match', ['get', 's'], 'Alerted', '#dc2626', 'Simulating', '#d97706', '#0369a1'], 'circle-opacity': 0.25 } },
+      { id: 'lakes', type: 'circle', paint: { 'circle-radius': 6, 'circle-color': ['match', ['get', 's'], 'Alerted', '#dc2626', 'Simulating', '#d97706', '#0369a1'], 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5 } },
     ])
   }, [lakes])
 
@@ -49,7 +52,7 @@ export default function LakeWatchPage() {
     setDemoPoint([ll.lng, ll.lat])
     const map = mapRef.current
     if (map) setGeoJson(map, 'demo', points([{ lon: ll.lng, lat: ll.lat }]), [
-      { id: 'demo', type: 'circle', paint: { 'circle-radius': 8, 'circle-color': '#22d3ee', 'circle-stroke-color': '#000', 'circle-stroke-width': 2 } },
+      { id: 'demo', type: 'circle', paint: { 'circle-radius': 8, 'circle-color': '#0891b2', 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } },
     ])
   }, [])
 
@@ -82,35 +85,39 @@ export default function LakeWatchPage() {
   const showCap = async (id: string) => setCap(await get<string>(`/api/alerts/${id}/cap`))
 
   return (
-    <div className="workspace wide">
-      <aside className="side">
-        <h1>Lake-to-Alert chain</h1>
+    <Workspace wide side={<>
+        <div className="side-head">
+          <div>
+            <h1>Lake watch & alerts</h1>
+            <div className="subtitle">New lakes spotted by satellite become simulations and alerts automatically</div>
+          </div>
+        </div>
+        <div className="side-body">
         <div className="info-box">
-          <b>Autonomous chain:</b> GEE scans Himalayan valleys weekly (Sentinel-1/2) → a new lake appears → volume from the DEM →
-          natural-dam simulation → inundation map, village list and CAP alert. No button presses between the satellite pixel and the evacuation map.
+          <b>How it works:</b> a weekly satellite scan (Sentinel-1/2) finds a new lake → its volume is estimated from terrain →
+          the outburst is simulated → flood map, village list and a CAP alert are produced. No manual steps in between.
         </div>
 
         <div className="card stack">
-          <h3>Feed a detection</h3>
+          <h3 style={{ margin: 0 }}><RadioTower size={12} aria-hidden /> Simulate a detection</h3>
           <p className="faint">
-            Normally <span className="mono">gee/lake_watch.py</span> drops JSON in <span className="mono">data/gee_outbox</span> or posts to
-            <span className="mono"> /api/lakes/detections</span>. For a live demo, click a new lake on the map and inject it.
+            Normally the scanner (<span className="mono">gee/lake_watch.py</span>) posts detections here. For a live demo, click a spot in a Himalayan valley and inject it.
           </p>
-          <div className="row">
+          <div className="row" style={{ alignItems: 'flex-end' }}>
             <div className="field grow"><label htmlFor="da">Lake area (km²)</label><input id="da" type="number" step={0.05} value={demoArea} onChange={e => setDemoArea(e.target.value)} /></div>
-            <button className="btn accent" onClick={injectDetection} disabled={busy || !canSim || !demoPoint} title={canSim ? undefined : viewerHint} style={{ alignSelf: 'flex-end' }}>
-              {busy ? <Loader2 size={14} className="spin" /> : <RadioTower size={14} />} Inject detection
+            <button className="btn primary" onClick={injectDetection} disabled={busy || !canSim || !demoPoint} title={canSim ? undefined : viewerHint}>
+              {busy ? <Loader2 size={14} className="spin" /> : <RadioTower size={14} aria-hidden />} Inject detection
             </button>
           </div>
-          <div className="faint">{demoPoint ? `${demoPoint[1].toFixed(4)}, ${demoPoint[0].toFixed(4)}` : 'click the map to place the lake'}</div>
+          <div className="faint">{demoPoint ? <>Lake at <span className="num-t">{demoPoint[1].toFixed(4)}, {demoPoint[0].toFixed(4)}</span></> : 'Click the map to place the lake.'}</div>
           <label className="btn small" style={{ alignSelf: 'flex-start' }} aria-disabled={!canSim}>
-            <Upload size={13} /> Offline: before + after NDWI GeoTIFFs
+            <Upload size={13} aria-hidden /> Offline: upload before + after NDWI GeoTIFFs
             <input type="file" accept=".tif,.tiff" multiple hidden disabled={!canSim} onChange={e => ndwi(e.target.files)} />
           </label>
           {msg && <div className="info-box">{msg}</div>}
         </div>
 
-        <h3>Detections ({lakes.length})</h3>
+        <h3 style={{ marginBottom: -4 }}>Detected lakes ({lakes.length})</h3>
         <div className="list">
           {lakes.map(l => (
             <div key={l.id} className="list-item" onClick={() => mapRef.current?.flyTo({ center: [l.lon, l.lat], zoom: 12 })} role="button" tabIndex={0}>
@@ -122,7 +129,7 @@ export default function LakeWatchPage() {
                 {l.areaKm2} km² {l.previousAreaKm2 != null && `(was ${l.previousAreaKm2})`} · {l.source} · {fmt.time(l.detectedUtc)}
               </div>
               {l.estimatedVolumeMcm != null && <div className="faint">Estimated level {l.estimatedLevel} m, volume <b>{l.estimatedVolumeMcm} MCM</b></div>}
-              {l.notes && l.state === 'Failed' && <div className="faint" style={{ color: '#fca5a5' }}>{l.notes}</div>}
+              {l.notes && l.state === 'Failed' && <div className="faint" style={{ color: 'var(--danger-text)' }}>{l.notes}</div>}
               <div className="row" style={{ marginTop: 6 }}>
                 {l.runId && <button className="btn small" onClick={e => { e.stopPropagation(); go('results', l.runId!) }}>Open simulation</button>}
                 {!l.runId && l.state !== 'Dismissed' && <button className="btn small" disabled={!canSim} onClick={e => { e.stopPropagation(); post(`/api/lakes/${l.id}/simulate`).then(load) }}><Play size={12} /> Simulate</button>}
@@ -133,10 +140,10 @@ export default function LakeWatchPage() {
           {lakes.length === 0 && <div className="empty">No detections yet.</div>}
         </div>
 
-        <h3><Bell size={13} /> Alerts ({alerts.length})</h3>
+        <h3 style={{ marginBottom: -4 }}><Bell size={12} aria-hidden /> Alerts ({alerts.length})</h3>
         <div className="list">
           {alerts.map(a => (
-            <div key={a.id} className="list-item" style={{ borderColor: a.acknowledged ? undefined : 'rgba(239,68,68,0.5)' }}>
+            <div key={a.id} className="list-item" style={{ borderColor: a.acknowledged ? undefined : '#fca5a5', background: a.acknowledged ? undefined : 'var(--danger-soft)' }}>
               <div className="row spread">
                 <span className={`badge ${a.severity === 'Extreme' ? 'red' : a.severity === 'Severe' ? 'amber' : 'blue'}`}>{a.severity}</span>
                 <span className="badge gray">{a.status}</span>
@@ -152,16 +159,18 @@ export default function LakeWatchPage() {
           ))}
           {alerts.length === 0 && <div className="empty">No alerts. Raise one from a run's Export tab, or let the lake chain do it.</div>}
         </div>
-        <a className="faint" href="/api/alerts/feed" target="_blank" rel="noreferrer">CAP Atom feed for aggregators</a>
-      </aside>
-      <MapView onReady={m => { mapRef.current = m; setLakes(l => [...l]) }} onClick={onMapClick} center={[81, 30]} zoom={5.5}>
+        <a className="faint" href="/api/alerts/feed" target="_blank" rel="noreferrer">CAP Atom feed for alert aggregators ↗</a>
+        </div>
+      </>}>
+      <MapView onReady={m => { mapRef.current = m; setLakes(l => [...l]) }} onClick={onMapClick} fitTo={HIMALAYA} initialBasemap="streets"
+        hint={demoPoint ? null : 'Click a valley to place a new lake'}>
         {cap && (
-          <div className="map-panel" style={{ top: 50, right: 50, width: 'min(560px, 60%)', maxHeight: '75%', overflow: 'auto' }}>
-            <div className="row spread"><b>CAP 1.2 alert</b><button className="btn small ghost" onClick={() => setCap(null)} aria-label="Close"><X size={12} /></button></div>
+          <div className="map-panel stack tight" style={{ top: 52, right: 52, width: 'min(560px, 60%)', maxHeight: '75%', overflow: 'auto' }}>
+            <div className="row spread"><b>CAP 1.2 alert</b><button className="btn icon small ghost" onClick={() => setCap(null)} aria-label="Close"><X size={12} /></button></div>
             <pre className="code">{cap}</pre>
           </div>
         )}
       </MapView>
-    </div>
+    </Workspace>
   )
 }

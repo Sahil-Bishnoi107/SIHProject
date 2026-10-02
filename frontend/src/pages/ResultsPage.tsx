@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Map as MlMap } from 'maplibre-gl'
 import maplibregl from 'maplibre-gl'
-import { AlertTriangle, Bell, Download, Loader2, Pause, Play, RotateCcw, Trash2, X } from 'lucide-react'
+import { Activity, AlertTriangle, ArrowLeft, Bell, CheckCircle2, ChevronDown, ChevronUp, Circle, Clock, Gauge, Home, IndianRupee, Layers, Users, Download, Loader2, Pause, Play, RotateCcw, Trash2, Waves, X } from 'lucide-react'
 import { del, download, exportUrl, fmt, get, layerImage, post, RunDetail, RunSummary } from '../api'
 import { useCanSimulate } from '../auth'
 import { useHub } from '../hub'
-import MapView, { fitBounds, points, removeSource, setGeoJson, setImage } from '../components/MapView'
+import MapView, { points, setGeoJson, setImage } from '../components/MapView'
+import Workspace from '../components/Workspace'
 import { Bars, Lines, Profile, rows } from '../components/Charts'
 import SphPanel from '../components/SphPanel'
 import { go } from '../App'
 
 export const hazardColor = ['#334155', '#add8e6', '#ffeda0', '#fec44f', '#fd8d3c', '#e31a1c', '#800026']
+const hazStyle = (c: number) => ({ background: hazardColor[c], color: c >= 5 ? '#fff' : '#111' })
 
 type Layer = 'depth' | 'hazard' | 'arrival' | 'velocity' | 'probability'
 
@@ -31,41 +33,76 @@ function RunList() {
 
   return (
     <div className="page">
-      <div className="row spread">
-        <h1>Simulation runs</h1>
-        <button className="btn small" onClick={load}><RotateCcw size={13} /> Refresh</button>
-      </div>
-      {loading && <div className="empty"><Loader2 className="spin" /> loading</div>}
-      {!loading && runs.length === 0 && <div className="empty">No runs yet. Start one from <a href="#/simulate">Dam break</a> or <a href="#/natural">Natural dam</a>.</div>}
-      <div className="table-wrap" style={{ maxHeight: 'none' }}>
-        <table>
-          <thead>
-            <tr><th>Scenario</th><th>Status</th><th>Mode</th><th>Origin</th><th className="num">Pop. at risk</th><th className="num">Area km²</th><th className="num">First arrival</th><th className="num">Qp m³/s</th><th>Created</th></tr>
-          </thead>
-          <tbody>
-            {runs.map(r => (
-              <tr key={r.id} className="clickable" onClick={() => go('results', r.id)}>
-                <td><b>{r.name}</b>{r.numbers?.syntheticDem && <span className="badge amber" style={{ marginLeft: 6 }}>synthetic DEM</span>}</td>
-                <td style={{ minWidth: 140 }}>
-                  <StatusBadge s={r.status} />
-                  {r.status === 'Running' && <div className="progress" style={{ marginTop: 4 }}><div style={{ width: `${r.progress * 100}%` }} /></div>}
-                  {r.status === 'Failed' && <div className="faint">{r.error}</div>}
-                </td>
-                <td>{r.mode}</td>
-                <td><span className="badge gray">{r.origin}</span></td>
-                <td className="num">{fmt.n(r.numbers?.populationAtRisk)}</td>
-                <td className="num">{fmt.n(r.numbers?.floodedAreaKm2, 2)}</td>
-                <td className="num">{fmt.min(r.numbers?.firstArrivalMin)}</td>
-                <td className="num">{fmt.n(r.numbers?.peakDischarge)}</td>
-                <td className="faint">{fmt.time(r.createdUtc)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="page-inner">
+        <div className="page-head">
+          <div>
+            <h1>Simulation results</h1>
+            <div className="subtitle">Every scenario that has been run. Open one to see its flood map and impact.</div>
+          </div>
+          <div className="row">
+            <button className="btn" onClick={load}><RotateCcw size={14} aria-hidden /> Refresh</button>
+            <a className="btn primary" href="#/simulate"><Play size={14} aria-hidden /> New simulation</a>
+          </div>
+        </div>
+        {runs.length > 0 && (
+          <div className="kpis four">
+            <div className="kpi-tile blue"><div className="label"><Layers size={13} aria-hidden /> Total runs</div><div className="value">{runs.length}</div></div>
+            <div className="kpi-tile sky"><div className="label"><Activity size={13} aria-hidden /> Running now</div><div className="value">{runs.filter(r => r.status === 'Running' || r.status === 'Queued').length}</div></div>
+            <div className="kpi-tile red"><div className="label"><Users size={13} aria-hidden /> Worst case at risk</div><div className="value">{fmt.n(Math.max(0, ...runs.map(r => r.numbers?.populationAtRisk ?? 0)))}</div></div>
+            <div className="kpi-tile amber"><div className="label"><Clock size={13} aria-hidden /> Fastest arrival</div><div className="value">{fmt.min(fastest(runs))}</div></div>
+          </div>
+        )}
+        {loading && <div className="empty"><Loader2 className="spin" /> Loading runs</div>}
+        {!loading && runs.length === 0 && (
+          <div className="card empty" style={{ padding: 48 }}>
+            <span className="empty-illus"><Waves size={24} aria-hidden /></span>
+            <b style={{ color: 'var(--text)', fontSize: 15 }}>No simulations yet</b>
+            <div>Pick a dam and run your first flood simulation.</div>
+            <div className="row" style={{ marginTop: 6 }}><a className="btn primary" href="#/simulate">Simulate a dam break</a><a className="btn" href="#/natural">Natural dam</a></div>
+          </div>
+        )}
+        {runs.length > 0 && (
+          <div className="table-wrap full">
+            <table>
+              <thead>
+                <tr><th>Scenario</th><th>Status</th><th>Type</th><th className="num">People at risk</th><th className="num">Flooded km²</th><th className="num">First arrival</th><th className="num">Peak flow m³/s</th><th>Started</th></tr>
+              </thead>
+              <tbody>
+                {runs.map(r => (
+                  <tr key={r.id} className="clickable" onClick={() => go('results', r.id)}>
+                    <td>
+                      <b>{r.name}</b>
+                      {r.numbers?.syntheticDem && <span className="badge amber" style={{ marginLeft: 6 }}>synthetic terrain</span>}
+                      {r.origin !== 'User' && <span className="badge gray" style={{ marginLeft: 6 }}>{r.origin}</span>}
+                    </td>
+                    <td style={{ minWidth: 140 }}>
+                      <StatusBadge s={r.status} />
+                      {r.status === 'Running' && <div className="progress" style={{ marginTop: 5 }}><div style={{ width: `${r.progress * 100}%` }} /></div>}
+                      {r.status === 'Failed' && <div className="faint" style={{ maxWidth: 260 }}>{r.error}</div>}
+                    </td>
+                    <td className="faint">{modeLabel[r.mode] ?? r.mode}</td>
+                    <td className="num"><b>{fmt.n(r.numbers?.populationAtRisk)}</b></td>
+                    <td className="num">{fmt.n(r.numbers?.floodedAreaKm2, 2)}</td>
+                    <td className="num">{fmt.min(r.numbers?.firstArrivalMin)}</td>
+                    <td className="num">{fmt.n(r.numbers?.peakDischarge)}</td>
+                    <td className="faint">{fmt.time(r.createdUtc)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   )
 }
+
+const fastest = (runs: RunSummary[]) => {
+  const t = runs.map(r => r.numbers?.firstArrivalMin).filter((v): v is number => v != null)
+  return t.length ? Math.min(...t) : null
+}
+
+const modeLabel: Record<string, string> ={ DamBreak: 'Dam break', NaturalDam: 'Natural dam', Cascade: 'Cascade' }
 
 export function StatusBadge({ s }: { s: string }) {
   const cls = s === 'Completed' ? 'green' : s === 'Failed' ? 'red' : s === 'Running' ? 'blue' : 'gray'
@@ -102,8 +139,8 @@ function RunView({ id }: { id: string }) {
     return () => clearInterval(t)
   }, [summary, load])
 
-  if (error) return <div className="page"><div className="alert-box">{error}</div></div>
-  if (!summary) return <div className="page"><div className="empty"><Loader2 className="spin" /></div></div>
+  if (error) return <div className="page"><div className="page-inner narrow"><a href="#/results" className="back-link"><ArrowLeft size={13} /> All runs</a><div className="alert-box">{error}</div></div></div>
+  if (!summary) return <div className="page"><div className="empty" style={{ height: '100%', justifyContent: 'center' }}><Loader2 className="spin" /></div></div>
   if (!detail) return <Pending s={summary} onChange={load} />
   return <RunDetailView d={detail} reload={load} />
 }
@@ -112,27 +149,41 @@ function Pending({ s, onChange }: { s: RunSummary; onChange: () => void }) {
   const canSim = useCanSimulate()
   const steps = ['Fetching terrain', 'Loading exposure', 'Preparing', 'SPH near field', '2D far field', 'Impact', 'Ensemble', 'Saving']
   const cur = steps.findIndex(x => s.stage.startsWith(x))
+  const active = s.status === 'Running' || s.status === 'Queued'
   return (
-    <div className="page" style={{ maxWidth: 720 }}>
-      <a href="#/results" className="faint">&larr; all runs</a>
-      <h1>{s.name}</h1>
-      <div className="card stack">
-        <div className="row spread"><StatusBadge s={s.status} /><span className="mono">{(s.progress * 100).toFixed(0)}%</span></div>
-        <div className="progress"><div style={{ width: `${s.progress * 100}%` }} /></div>
-        <div className="muted">{s.stage}</div>
-        <ol className="recs">
-          {steps.map((st, i) => (
-            <li key={st} style={{ color: i < cur ? 'var(--ok)' : i === cur ? 'var(--text)' : 'var(--text-faint)' }}>{st}</li>
-          ))}
-        </ol>
-        {s.status === 'Failed' && <div className="alert-box">{s.error}</div>}
-        <div className="row">
-          {(s.status === 'Running' || s.status === 'Queued') && (
-            <button className="btn danger small" disabled={!canSim} onClick={() => post(`/api/runs/${s.id}/cancel`).then(onChange)}><X size={13} /> Cancel</button>
-          )}
-          {(s.status === 'Failed' || s.status === 'Cancelled') && (
-            <button className="btn small" disabled={!canSim} onClick={() => post<RunSummary>(`/api/runs/${s.id}/rerun`).then(r => go('results', r.id))}><RotateCcw size={13} /> Run again</button>
-          )}
+    <div className="page">
+      <div className="page-inner narrow">
+        <a href="#/results" className="back-link"><ArrowLeft size={13} aria-hidden /> All runs</a>
+        <div className="page-head">
+          <div>
+            <h1>{s.name}</h1>
+            <div className="subtitle">{active ? 'The flood model is running. This page opens the results automatically when it finishes.' : `Run ${s.status.toLowerCase()}.`}</div>
+          </div>
+          <StatusBadge s={s.status} />
+        </div>
+        <div className="card stack">
+          <div className="row spread">
+            <span className="muted">{s.stage || 'Waiting for a worker'}</span>
+            <span className="num-t" style={{ fontWeight: 600 }}>{(s.progress * 100).toFixed(0)}%</span>
+          </div>
+          <div className="progress" role="progressbar" aria-valuenow={Math.round(s.progress * 100)} aria-valuemin={0} aria-valuemax={100}><div style={{ width: `${s.progress * 100}%` }} /></div>
+          <ol className="steps">
+            {steps.map((st, i) => (
+              <li key={st} className={i < cur ? 'done' : i === cur && active ? 'cur' : ''}>
+                {i < cur ? <CheckCircle2 size={15} aria-hidden /> : i === cur && active ? <Loader2 size={15} className="spin" aria-hidden /> : <Circle size={15} aria-hidden />}
+                {st}
+              </li>
+            ))}
+          </ol>
+          {s.status === 'Failed' && <div className="alert-box">{s.error}</div>}
+          <div className="row">
+            {active && (
+              <button className="btn danger small" disabled={!canSim} onClick={() => post(`/api/runs/${s.id}/cancel`).then(onChange)}><X size={13} aria-hidden /> Cancel run</button>
+            )}
+            {(s.status === 'Failed' || s.status === 'Cancelled') && (
+              <button className="btn small" disabled={!canSim} onClick={() => post<RunSummary>(`/api/runs/${s.id}/rerun`).then(r => go('results', r.id))}><RotateCcw size={13} aria-hidden /> Run again</button>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -149,6 +200,7 @@ function RunDetailView({ d, reload }: { d: RunDetail; reload: () => void }) {
   const [frame, setFrame] = useState<number | null>(null)
   const [playing, setPlaying] = useState(false)
   const [sample, setSample] = useState<any>(null)
+  const [legendOpen, setLegendOpen] = useState(true)
   const mapRef = useRef<MlMap | null>(null)
   const id = d.summary.id
   const imp = d.impact
@@ -156,28 +208,27 @@ function RunDetailView({ d, reload }: { d: RunDetail; reload: () => void }) {
   const drawVectors = useCallback((map: MlMap) => {
     if (d.river.length > 1)
       setGeoJson(map, 'river', { type: 'Feature', geometry: { type: 'LineString', coordinates: d.river }, properties: {} }, [
-        { id: 'river', type: 'line', paint: { 'line-color': '#93c5fd', 'line-width': 1.2, 'line-dasharray': [2, 2], 'line-opacity': 0.7 } },
+        { id: 'river', type: 'line', paint: { 'line-color': '#0ea5e9', 'line-width': 1.4, 'line-dasharray': [2, 2], 'line-opacity': 0.8 } },
       ])
     setGeoJson(map, 'places', points(imp.places.map(p => ({ lon: p.lon, lat: p.lat, props: { name: p.name, c: hazardColor[p.hazardClass], arr: p.arrivalMin ?? -1, depth: p.maxDepth, pop: p.population, golden: p.goldenTimeMin ?? -999 } }))), [
-      { id: 'places', type: 'circle', paint: { 'circle-radius': 6, 'circle-color': ['get', 'c'], 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5 } },
+      { id: 'places', type: 'circle', paint: { 'circle-radius': 6, 'circle-color': ['get', 'c'], 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } },
     ])
     setGeoJson(map, 'bridges', points(imp.bridges.map(b => ({ lon: b.lon, lat: b.lat, props: { name: b.name, over: b.overtopped ? 1 : 0 } }))), [
-      { id: 'bridges', type: 'circle', paint: { 'circle-radius': 4.5, 'circle-color': ['case', ['==', ['get', 'over'], 1], '#ef4444', '#94a3b8'], 'circle-stroke-color': '#111', 'circle-stroke-width': 1 } },
+      { id: 'bridges', type: 'circle', paint: { 'circle-radius': 4.5, 'circle-color': ['case', ['==', ['get', 'over'], 1], MARK.bridgeOver, MARK.bridge], 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5 } },
     ])
-    setGeoJson(map, 'staging', points(imp.staging.map(s => ({ lon: s.lon, lat: s.lat, props: { name: `${s.type} ${s.areaHa} ha`, t: s.type } }))), [
-      { id: 'staging', type: 'circle', paint: { 'circle-radius': 7, 'circle-color': '#22c55e', 'circle-opacity': 0.9, 'circle-stroke-color': '#052e16', 'circle-stroke-width': 2 } },
+    setGeoJson(map, 'staging', points(imp.staging.map(s => ({ lon: s.lon, lat: s.lat, props: { name: `${s.type} · ${s.areaHa} ha`, t: s.type } }))), [
+      { id: 'staging', type: 'circle', paint: { 'circle-radius': 7, 'circle-color': MARK.staging, 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } },
     ])
     setGeoJson(map, 'sensors', points(imp.sensors.map((s, i) => ({ lon: s.lon, lat: s.lat, props: { name: `Sensor S${i + 1}` } }))), [
-      { id: 'sensors', type: 'circle', paint: { 'circle-radius': 5, 'circle-color': '#22d3ee', 'circle-stroke-color': '#083344', 'circle-stroke-width': 2 } },
+      { id: 'sensors', type: 'circle', paint: { 'circle-radius': 5, 'circle-color': MARK.sensor, 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } },
     ])
-    setGeoJson(map, 'dam', points([{ lon: d.dam[0], lat: d.dam[1], props: { name: 'Breach' } }]), [
-      { id: 'dam', type: 'circle', paint: { 'circle-radius': 8, 'circle-color': '#f59e0b', 'circle-stroke-color': '#000', 'circle-stroke-width': 2 } },
+    setGeoJson(map, 'dam', points([{ lon: d.dam[0], lat: d.dam[1], props: { name: 'Breach location' } }]), [
+      { id: 'dam', type: 'circle', paint: { 'circle-radius': 8, 'circle-color': MARK.dam, 'circle-stroke-color': '#fff', 'circle-stroke-width': 3 } },
     ])
   }, [d, imp])
 
   const onReady = useCallback((map: MlMap) => {
     mapRef.current = map
-    fitBounds(map, d.bounds)
     setImage(map, 'flood', layerImage(id, 'depth'), d.bounds, opacity, 'river')
     drawVectors(map)
     for (const l of ['places', 'bridges', 'staging', 'sensors', 'dam']) {
@@ -186,9 +237,9 @@ function RunDetailView({ d, reload }: { d: RunDetail; reload: () => void }) {
       map.on('click', l, e => {
         const p: any = e.features?.[0]?.properties ?? {}
         const html = l === 'places'
-          ? `<b>${p.name}</b><br/>pop ${p.pop}<br/>arrival ${p.arr >= 0 ? p.arr + ' min' : '-'}<br/>depth ${p.depth} m<br/>golden time ${p.golden > -999 ? p.golden + ' min' : '-'}`
+          ? `<b>${p.name}</b><div style="color:#64748b;margin-top:2px">Population ${Number(p.pop).toLocaleString('en-IN')}<br/>Flood arrives ${p.arr >= 0 ? p.arr + ' min' : '-'} · depth ${p.depth} m<br/>Golden time ${p.golden > -999 ? p.golden + ' min' : '-'}</div>`
           : `<b>${p.name}</b>`
-        new maplibregl.Popup({ closeButton: false }).setLngLat(e.lngLat).setHTML(html).addTo(map)
+        new maplibregl.Popup({ closeButton: false, offset: 8 }).setLngLat(e.lngLat).setHTML(html).addTo(map)
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -197,7 +248,7 @@ function RunDetailView({ d, reload }: { d: RunDetail; reload: () => void }) {
   // switch layer / animation frame
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !map.getSource('flood')) return
+    if (!map || !map.getStyle() || !map.getSource('flood')) return
     const name = frame === null ? layer : `snapshot-${frame}`
     setImage(map, 'flood', layerImage(id, name), d.bounds, opacity)
   }, [layer, frame, opacity, id, d.bounds])
@@ -221,98 +272,120 @@ function RunDetailView({ d, reload }: { d: RunDetail; reload: () => void }) {
   const layers: Layer[] = ['depth', 'hazard', 'arrival', 'velocity', ...(d.ensemble ? (['probability'] as Layer[]) : [])]
   const legendKey = frame !== null ? 'depth' : layer
 
+  const flyTo = (lon: number, lat: number) => mapRef.current?.flyTo({ center: [lon, lat], zoom: 13, duration: 900 })
+
   return (
-    <div className="workspace wide">
-      <aside className="side">
-        <div className="row spread">
-          <a href="#/results" className="faint">&larr; all runs</a>
-          <div className="row">
-            <button className="btn small" disabled={!canSim} onClick={() => post<RunSummary>(`/api/runs/${id}/rerun`).then(r => go('results', r.id))} title="Run again"><RotateCcw size={13} /></button>
-            <button className="btn small danger" disabled={!canSim} title="Delete run" onClick={() => confirm('Delete this run and its files?') && del(`/api/runs/${id}`).then(() => go('results'))}><Trash2 size={13} /></button>
+    <Workspace wide side={<>
+        <div className="side-head">
+          <div className="row spread">
+            <a href="#/results" className="back-link"><ArrowLeft size={13} aria-hidden /> All runs</a>
+            <div className="row tight">
+              <button className="btn icon ghost" disabled={!canSim} onClick={() => post<RunSummary>(`/api/runs/${id}/rerun`).then(r => go('results', r.id))} title="Run again" aria-label="Run again"><RotateCcw size={14} /></button>
+              <button className="btn icon ghost" disabled={!canSim} title="Delete run" aria-label="Delete run" onClick={() => confirm('Delete this run and its files?') && del(`/api/runs/${id}`).then(() => go('results'))}><Trash2 size={14} /></button>
+            </div>
+          </div>
+          <div>
+            <h1>{d.summary.name}</h1>
+            <div className="subtitle">{modeLabel[d.spec.mode] ?? d.spec.mode} · {n?.demSource} · finished {fmt.time(d.summary.finishedUtc)}</div>
+          </div>
+          <div className="tabs" role="tablist">
+            {tabs.filter(t => (t !== 'SPH' || d.nearField) && (t !== 'Ensemble' || d.ensemble)).map(t => (
+              <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>{t}</button>
+            ))}
           </div>
         </div>
-        <div>
-          <h1>{d.summary.name}</h1>
-          <div className="faint">{d.spec.mode} · {n?.demSource} · finished {fmt.time(d.summary.finishedUtc)}</div>
+
+        <div className="side-body">
+          {n?.syntheticDem && <div className="warn-box row" style={{ alignItems: 'flex-start' }}><AlertTriangle size={14} style={{ flex: 'none', marginTop: 2 }} /> No terrain data was available here offline. These results use a synthetic valley and are for demonstration only.</div>}
+
+          {tab === 'Overview' && (
+            <div className="kpis">
+              <div className="kpi-tile red"><div className="label"><Users size={13} aria-hidden /> People at risk</div><div className="value">{fmt.n(imp.populationAtRisk)}</div></div>
+              <div className="kpi-tile amber"><div className="label"><Clock size={13} aria-hidden /> Water arrives in</div><div className="value">{fmt.min(n?.firstArrivalMin)}</div></div>
+              <div className="kpi-tile blue"><div className="label"><Home size={13} aria-hidden /> Settlements hit</div><div className="value">{imp.settlementsAffected}</div></div>
+              <div className="kpi-tile sky"><div className="label"><Waves size={13} aria-hidden /> Flooded area</div><div className="value">{imp.floodedAreaKm2.toFixed(1)}<small>km²</small></div></div>
+              <div className="kpi-tile violet"><div className="label"><Gauge size={13} aria-hidden /> Peak outflow</div><div className="value">{fmt.n(d.summary.numbers?.peakDischarge)}<small>m³/s</small></div></div>
+              <div className="kpi-tile green"><div className="label"><IndianRupee size={13} aria-hidden /> Est. loss</div><div className="value">{fmt.n(imp.loss.totalCrore, 0)}<small>crore</small></div></div>
+            </div>
+          )}
+
+          {tab === 'Overview' && <Overview d={d} />}
+          {tab === 'Impact' && <ImpactTab d={d} flyTo={flyTo} />}
+          {tab === 'Hydraulics' && <HydraulicsTab d={d} />}
+          {tab === 'SPH' && d.nearField && <SphPanel nf={d.nearField} />}
+          {tab === 'Ensemble' && d.ensemble && <EnsembleTab e={d.ensemble} />}
+          {tab === 'Export' && <ExportTab d={d} reload={reload} />}
+          {tab === 'Log' && <pre className="code">{d.log.join('\n')}{'\n\n'}{JSON.stringify(d.model, null, 2)}</pre>}
         </div>
-        {n?.syntheticDem && <div className="warn-box"><AlertTriangle size={13} /> No DEM was available for this area offline - results use a synthetic valley and are for demonstration only.</div>}
+      </>}>
 
-        <div className="stats">
-          <div className="stat danger"><div className="label">Population at risk</div><div className="value">{fmt.n(imp.populationAtRisk)}</div></div>
-          <div className="stat"><div className="label">Settlements</div><div className="value">{imp.settlementsAffected}</div></div>
-          <div className="stat warn"><div className="label">First arrival</div><div className="value">{fmt.min(n?.firstArrivalMin)}</div></div>
-          <div className="stat"><div className="label">Flooded area</div><div className="value">{imp.floodedAreaKm2.toFixed(2)} km²</div></div>
-          <div className="stat"><div className="label">Peak outflow</div><div className="value">{fmt.n(d.summary.numbers?.peakDischarge)}</div></div>
-          <div className="stat"><div className="label">Loss (indicative)</div><div className="value">₹{fmt.n(imp.loss.totalCrore, 0)} cr</div></div>
-        </div>
-
-        <div className="tabs" role="tablist">
-          {tabs.filter(t => (t !== 'SPH' || d.nearField) && (t !== 'Ensemble' || d.ensemble)).map(t => (
-            <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>{t}</button>
-          ))}
-        </div>
-
-        {tab === 'Overview' && <Overview d={d} />}
-        {tab === 'Impact' && <ImpactTab d={d} flyTo={(lon, lat) => mapRef.current?.flyTo({ center: [lon, lat], zoom: 13 })} />}
-        {tab === 'Hydraulics' && <HydraulicsTab d={d} />}
-        {tab === 'SPH' && d.nearField && <SphPanel nf={d.nearField} />}
-        {tab === 'Ensemble' && d.ensemble && <EnsembleTab e={d.ensemble} />}
-        {tab === 'Export' && <ExportTab d={d} reload={reload} />}
-        {tab === 'Log' && <pre className="code">{d.log.join('\n')}{'\n\n'}{JSON.stringify(d.model, null, 2)}</pre>}
-      </aside>
-
-      <MapView onReady={onReady} onClick={onMapClick} initialBasemap="satellite">
-        <div className="map-toolbar" style={{ top: 50 }}>
+      <MapView onReady={onReady} onClick={onMapClick} initialBasemap="satellite" fitTo={d.bounds}>
+        <div className="map-toolbar second">
           <div className="segmented" role="group" aria-label="Result layer">
             {layers.map(l => (
-              <button key={l} className={frame === null && layer === l ? 'on' : ''} onClick={() => { setPlaying(false); setFrame(null); setLayer(l) }}>{l}</button>
+              <button key={l} className={frame === null && layer === l ? 'on' : ''} aria-pressed={frame === null && layer === l}
+                onClick={() => { setPlaying(false); setFrame(null); setLayer(l) }}>{layerLabel[l]}</button>
             ))}
           </div>
         </div>
 
         <div className="map-panel map-legend">
-          <div className="faint" style={{ marginBottom: 4 }}>{frame !== null ? 'water depth' : legendKey}</div>
+          <button className="legend-toggle" onClick={() => setLegendOpen(o => !o)} aria-expanded={legendOpen}>
+            <span className="legend-title" style={{ margin: 0 }}>{frame !== null ? 'Water depth' : layerLabel[legendKey as Layer] ?? legendKey}</span>
+            {legendOpen ? <ChevronDown size={13} aria-hidden /> : <ChevronUp size={13} aria-hidden />}
+          </button>
+          {legendOpen && <>
           {(d.legends[legendKey] ?? []).map(({ item1, item2 }) => (
-            <div key={item1}><span className="sw" style={{ background: item2 }} />{item1}</div>
+            <div key={item1} className="item"><span className="sw" style={{ background: item2 }} />{item1}</div>
           ))}
           <div className="row" style={{ marginTop: 6 }}>
-            <span className="faint">opacity</span>
+            <span className="faint">Opacity</span>
             <input type="range" min={0.2} max={1} step={0.05} value={opacity} onChange={e => setOpacity(+e.target.value)} aria-label="Layer opacity" />
           </div>
+          <hr className="divider" style={{ margin: '8px 0 6px' }} />
+          <div className="item"><span className="sw round" style={{ background: MARK.dam }} />Breach</div>
+          <div className="item"><span className="sw round" style={{ background: hazardColor[4] }} />Settlement (by hazard)</div>
+          <div className="item"><span className="sw round" style={{ background: MARK.bridgeOver }} />Bridge overtopped</div>
+          <div className="item"><span className="sw round" style={{ background: MARK.staging }} />Relief staging area</div>
+          <div className="item"><span className="sw round" style={{ background: MARK.sensor }} />Warning sensor</div>
+          </>}
         </div>
 
         {d.snapshotTimes.length > 1 && (
           <div className="map-panel map-time">
             <div className="row">
-              <button className="btn small" onClick={() => { if (frame === null) setFrame(0); setPlaying(p => !p) }} aria-label={playing ? 'Pause animation' : 'Play animation'}>
+              <button className="btn icon small primary" onClick={() => { if (frame === null) setFrame(0); setPlaying(p => !p) }} aria-label={playing ? 'Pause animation' : 'Play animation'}>
                 {playing ? <Pause size={13} /> : <Play size={13} />}
               </button>
               <input type="range" min={0} max={d.snapshotTimes.length - 1} value={frame ?? 0}
                 onChange={e => { setPlaying(false); setFrame(+e.target.value) }} aria-label="Time step" />
-              <span className="mono" style={{ minWidth: 88, textAlign: 'right' }}>
-                {frame === null ? 'maximum' : `T+${fmt.min(d.snapshotTimes[frame] / 60)}`}
+              <span className="num-t" style={{ minWidth: 92, textAlign: 'right', fontWeight: 600 }}>
+                {frame === null ? 'Peak (max)' : `T + ${fmt.min(d.snapshotTimes[frame] / 60)}`}
               </span>
-              {frame !== null && <button className="btn small ghost" onClick={() => { setPlaying(false); setFrame(null) }} title="Back to maximum envelope"><X size={12} /></button>}
+              {frame !== null && <button className="btn icon small ghost" onClick={() => { setPlaying(false); setFrame(null) }} title="Back to maximum extent" aria-label="Back to maximum extent"><X size={12} /></button>}
             </div>
           </div>
         )}
 
         {sample && (
           <div className="map-panel map-sample">
-            <div className="row spread"><b>Point query</b><button className="btn small ghost" onClick={() => setSample(null)} aria-label="Close"><X size={12} /></button></div>
-            <div className="mono faint">{sample.lat.toFixed(4)}, {sample.lng.toFixed(4)}</div>
-            <div>Ground: <b>{sample.ground} m</b></div>
-            <div>Max depth: <b>{sample.depth} m</b> · velocity <b>{sample.velocity} m/s</b></div>
-            <div>Arrival: <b>{fmt.min(sample.arrivalMin)}</b> · peak {fmt.min(sample.peakMin)}</div>
-            <div>Hazard: <span className="haz" style={{ background: hazardColor[sample.hazard] }}>{sample.hazard ? 'H' + sample.hazard : '-'}</span></div>
-            {sample.probability != null && <div>P(flooded): <b>{(sample.probability * 100).toFixed(0)}%</b></div>}
+            <div className="row spread"><b>At this point</b><button className="btn icon small ghost" onClick={() => setSample(null)} aria-label="Close"><X size={12} /></button></div>
+            <div className="faint num-t">{sample.lat.toFixed(4)}, {sample.lng.toFixed(4)}</div>
+            <div>Max depth <b>{sample.depth} m</b> · speed <b>{sample.velocity} m/s</b></div>
+            <div>Water arrives <b>{fmt.min(sample.arrivalMin)}</b> · peaks {fmt.min(sample.peakMin)}</div>
+            <div>Ground level {sample.ground} m</div>
+            <div className="row tight">Hazard <span className="haz" style={hazStyle(sample.hazard)}>{sample.hazard ? 'H' + sample.hazard : '-'}</span></div>
+            {sample.probability != null && <div>Chance of flooding <b>{(sample.probability * 100).toFixed(0)}%</b></div>}
             <button className="btn small block" style={{ marginTop: 6 }} onClick={() => go('inverse', `${id}?lon=${sample.lng}&lat=${sample.lat}`)}>How much release floods this point?</button>
           </div>
         )}
       </MapView>
-    </div>
+    </Workspace>
   )
 }
+
+const layerLabel: Record<Layer, string> = { depth: 'Depth', hazard: 'Hazard', arrival: 'Arrival time', velocity: 'Velocity', probability: 'Probability' }
+const MARK = { dam: '#d97706', bridge: '#64748b', bridgeOver: '#dc2626', staging: '#16a34a', sensor: '#0891b2' }
 
 // ------------------------------------------------------------------ tabs
 
@@ -380,8 +453,8 @@ function ImpactTab({ d, flyTo }: { d: RunDetail; flyTo: (lon: number, lat: numbe
                 <td className="num">{fmt.min(p.arrivalMin)}</td>
                 <td className="num">{p.maxDepth.toFixed(1)}</td>
                 <td className="num">{p.maxSpeed.toFixed(1)}</td>
-                <td><span className="haz" style={{ background: hazardColor[p.hazardClass] }}>{p.hazardLabel}</span></td>
-                <td className="num" style={{ color: p.goldenTimeMin != null && p.goldenTimeMin < 15 ? '#fca5a5' : undefined }}>{fmt.n(p.goldenTimeMin)}</td>
+                <td><span className="haz" style={hazStyle(p.hazardClass)}>{p.hazardLabel}</span></td>
+                <td className="num" style={{ color: p.goldenTimeMin != null && p.goldenTimeMin < 15 ? 'var(--danger-text)' : undefined, fontWeight: p.goldenTimeMin != null && p.goldenTimeMin < 15 ? 600 : undefined }}>{fmt.n(p.goldenTimeMin)}</td>
               </tr>
             ))}
           </tbody>
@@ -557,7 +630,7 @@ function ExportTab({ d, reload }: { d: RunDetail; reload: () => void }) {
         <p className="faint">Creates a CAP 1.2 alert (English + Hindi) from this run. Status defaults to <b>Exercise</b>; only switch to Actual for a real event.</p>
         <div className="row">
           <button className="btn accent" disabled={!canSim} onClick={() => post<any>(`/api/runs/${id}/alert?status=Exercise`).then(a => setMsg(a.headline)).catch(e => setMsg(e.message))}><Bell size={14} /> Exercise alert</button>
-          <button className="btn danger" disabled={!canSim} onClick={() => confirm('Issue an ACTUAL alert? This is meant for real events only.') &&
+          <button className="btn danger solid" disabled={!canSim} onClick={() => confirm('Issue an ACTUAL alert? This is meant for real events only.') &&
             post<any>(`/api/runs/${id}/alert?status=Actual`).then(a => setMsg(a.headline)).catch(e => setMsg(e.message))}>Actual alert</button>
         </div>
         {msg && <div className="info-box">{msg} - see <a href="#/lakes">Lake watch & alerts</a></div>}

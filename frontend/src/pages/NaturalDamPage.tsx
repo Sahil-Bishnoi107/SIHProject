@@ -4,7 +4,8 @@ import { Check, Eraser, Loader2, PenLine, Play, Satellite, Undo2 } from 'lucide-
 import { fmt, post, RunSummary, ScenarioSpec, upload } from '../api'
 import { useCanSimulate, viewerHint } from '../auth'
 import MapView, { points, removeSource, setGeoJson } from '../components/MapView'
-import ScenarioOptions, { defaultSpec } from '../components/ScenarioOptions'
+import Workspace from '../components/Workspace'
+import ScenarioOptions, { defaultSpec, initialSpec } from '../components/ScenarioOptions'
 import { Lines } from '../components/Charts'
 import { go } from '../App'
 
@@ -22,7 +23,7 @@ export default function NaturalDamPage() {
   const [crest, setCrest] = useState<string>('')
   const [level, setLevel] = useState<string>('')
   const [lake, setLake] = useState<any>(null)
-  const [spec, setSpec] = useState<ScenarioSpec>({ ...defaultSpec(), name: 'Landslide lake outburst', mode: 'NaturalDam', durationHours: 4, ensembleMembers: 10, runSph: true, debrisFlow: true })
+  const [spec, setSpec] = useState<ScenarioSpec>(initialSpec({ ...defaultSpec(), name: 'Landslide lake outburst', mode: 'NaturalDam', durationHours: 4, ensembleMembers: 10, runSph: true, debrisFlow: true }))
 
   // transboundary state
   const [point, setPoint] = useState<number[] | null>(null)
@@ -137,31 +138,40 @@ export default function NaturalDamPage() {
   }
 
   return (
-    <div className="workspace">
-      <aside className="side">
-        <h1>Natural dams & remote reservoirs</h1>
-        <div className="segmented" role="tablist">
-          <button className={mode === 'landslide' ? 'on' : ''} onClick={() => setMode('landslide')}>Landslide / GLOF lake</button>
-          <button className={mode === 'transboundary' ? 'on' : ''} onClick={() => setMode('transboundary')}>Satellite-only reservoir</button>
+    <Workspace side={<>
+        <div className="side-head">
+          <div>
+            <h1>Natural dams & remote lakes</h1>
+            <div className="subtitle">Landslide or glacial lakes, and reservoirs seen only from space</div>
+          </div>
+          <div className="segmented block" role="tablist">
+            <button role="tab" aria-selected={mode === 'landslide'} className={mode === 'landslide' ? 'on' : ''} onClick={() => setMode('landslide')}>Landslide / glacial lake</button>
+            <button role="tab" aria-selected={mode === 'transboundary'} className={mode === 'transboundary' ? 'on' : ''} onClick={() => setMode('transboundary')}>Satellite-only reservoir</button>
+          </div>
         </div>
+        <div className="side-body">
 
         {mode === 'landslide' && (
           <>
             <div className="info-box">
-              Rishi Ganga 2021, Parechu 2004, Phuktal 2015: the blockage is visible on imagery long before the flood.
-              Draw the debris footprint <b>across the valley</b>; we work out how high the lake can rise before it spills,
-              its volume, and simulate the outburst.
+              Landslide blockages (Rishi Ganga 2021, Parechu 2004) show up on satellite images long before the flood.
+              Outline the debris <b>across the valley</b>. We work out how high the lake can rise before it spills, how much water it holds,
+              and simulate the outburst.
             </div>
-            <div className="row wrap">
-              <button className={`btn ${drawing ? 'accent' : 'primary'}`} onClick={() => setDrawing(d => !d)}>
-                {drawing ? <><Check size={14} /> Finish drawing</> : <><PenLine size={14} /> Draw debris polygon</>}
-              </button>
-              <button className="btn small" onClick={() => setVerts(v => v.slice(0, -1))} disabled={!verts.length}><Undo2 size={13} /> Undo</button>
-              <button className="btn small" onClick={() => { setVerts([]); setLake(null); showLake(null) }} disabled={!verts.length}><Eraser size={13} /> Clear</button>
+            <div>
+              <h3>1 · Outline the blockage</h3>
+              <div className="row wrap">
+                <button className={`btn ${drawing ? 'accent' : 'primary'}`} onClick={() => setDrawing(d => !d)}>
+                  {drawing ? <><Check size={14} aria-hidden /> Finish drawing</> : <><PenLine size={14} aria-hidden /> Draw debris outline</>}
+                </button>
+                <button className="btn small" onClick={() => setVerts(v => v.slice(0, -1))} disabled={!verts.length}><Undo2 size={13} aria-hidden /> Undo</button>
+                <button className="btn small" onClick={() => { setVerts([]); setLake(null); showLake(null) }} disabled={!verts.length}><Eraser size={13} aria-hidden /> Clear</button>
+              </div>
+              <div className="faint" style={{ marginTop: 6 }}>{drawing ? 'Click on the map to add points.' : `${verts.length} points${verts.length < 3 ? ' - at least 3 needed' : ''}`}</div>
             </div>
-            <div className="faint">{drawing ? 'Click on the map to add vertices.' : `${verts.length} vertices`}</div>
 
-            <div className="card fields">
+            <h3 style={{ marginBottom: -4 }}>2 · Blockage size</h3>
+            <div className="fields">
               <div className="field">
                 <label htmlFor="hab">Blockage height above bed (m)</label>
                 <input id="hab" type="number" value={height} onChange={e => setHeight(e.target.value)} />
@@ -183,7 +193,7 @@ export default function NaturalDamPage() {
 
             {lake && (
               <div className="card stack">
-                {lake.synthetic && <div className="warn-box">Synthetic DEM - no terrain available here.</div>}
+                {lake.synthetic && <div className="warn-box">No terrain data here - using a synthetic valley.</div>}
                 <div className="stats">
                   <div className="stat"><div className="label">Spill level</div><div className="value">{lake.spillLevel} m</div></div>
                   <div className="stat"><div className="label">Blockage height</div><div className="value">{lake.damHeight} m</div></div>
@@ -216,8 +226,8 @@ export default function NaturalDamPage() {
               Water-spread area from Sentinel-2 NDWI / Sentinel-1, or water level from SWOT / ICESat-2, is inverted through the
               DEM's area-elevation-volume curve to get the stored volume.
             </div>
-            <div className="faint"><Satellite size={12} /> Click on the lake on the map. {point && <span className="mono">{point[1].toFixed(4)}, {point[0].toFixed(4)}</span>}</div>
-            <div className="card fields">
+            <div className="faint row tight"><Satellite size={12} aria-hidden /> {point ? <>Lake at <span className="num-t">{point[1].toFixed(4)}, {point[0].toFixed(4)}</span></> : 'Click on the lake in the map.'}</div>
+            <div className="fields">
               <div className="field">
                 <label htmlFor="ar">Water area (km²)</label>
                 <input id="ar" type="number" value={area} onChange={e => setArea(e.target.value)} placeholder="from NDWI" />
@@ -255,9 +265,11 @@ export default function NaturalDamPage() {
             )}
           </>
         )}
-        {error && <div className="alert-box">{error}</div>}
-      </aside>
-      <MapView onReady={m => (mapRef.current = m)} onClick={onMapClick} center={[79.74, 30.5]} zoom={11} initialBasemap="satellite" />
-    </div>
+        {error && <div className="alert-box" role="alert">{error}</div>}
+        </div>
+      </>}>
+      <MapView onReady={m => (mapRef.current = m)} onClick={onMapClick} center={[79.74, 30.5]} zoom={11} initialBasemap="satellite"
+        hint={mode === 'landslide' ? (drawing ? 'Click around the landslide debris to outline it' : null) : point ? null : 'Click on the lake'} />
+    </Workspace>
   )
 }

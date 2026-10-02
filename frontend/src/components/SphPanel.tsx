@@ -41,30 +41,30 @@ export default function SphPanel({ nf }: { nf: any }) {
     bx.forEach((x, i) => g.lineTo(sx(x), sz(bz[i])))
     g.lineTo(sx(bx[bx.length - 1]), h)
     g.closePath()
-    g.fillStyle = '#5b4520'
+    g.fillStyle = '#d6c3a1'
     g.fill()
 
     if (nf.structureDistance) {
-      g.fillStyle = '#94a3b8'
+      g.fillStyle = '#475569'
       const xs = sx(nf.structureDistance)
       g.fillRect(xs, sz(interp(bx, bz, nf.structureDistance) + 15), 3, sz(interp(bx, bz, nf.structureDistance)) - sz(interp(bx, bz, nf.structureDistance) + 15))
     }
 
     const f = frames[Math.min(k, frames.length - 1)]
-    g.fillStyle = '#60a5fa'
+    g.fillStyle = '#0369a1'
     for (let i = 0; i < f.x.length; i++) g.fillRect(sx(f.x[i]) - 1, sz(f.z[i]) - 1, 2, 2)
 
-    g.fillStyle = '#e2e8f0'
-    g.font = '11px Fira Code, monospace'
+    g.fillStyle = '#334155'
+    g.font = '11px Inter, system-ui, sans-serif'
     g.fillText(`t = ${f.t.toFixed(1)} s  (prototype, 1:${nf.scale.toFixed(0)} Froude scaling)`, 12, 16)
-    g.strokeStyle = '#f59e0b'
+    g.strokeStyle = '#d97706'
     g.setLineDash([4, 3])
     g.beginPath()
     g.moveTo(sx(nf.handoverDistance), 0)
     g.lineTo(sx(nf.handoverDistance), h)
     g.stroke()
     g.setLineDash([])
-    g.fillStyle = '#fcd34d'
+    g.fillStyle = '#b45309'
     g.fillText('handover to 2D', sx(nf.handoverDistance) - 90, h - 4)
   }, [k, frames, nf])
 
@@ -79,7 +79,7 @@ export default function SphPanel({ nf }: { nf: any }) {
         <div className="stat"><div className="label">q at dam, Ritter</div><div className="value">{fmt.n(nf.ritterDamQ)}</div></div>
       </div>
       {nf.peakForceKN != null && (
-        <div className="alert-box">
+        <div className="warn-box">
           Peak impact on <b>{nf.structureName}</b> ({(nf.structureDistance / 1000).toFixed(1)} km below dam):{' '}
           <b className="mono">{fmt.n(nf.peakForceKN)} kN</b>, mean pressure <b className="mono">{fmt.n(nf.peakPressureKPa)} kPa</b>.
           Delft3D tells you where the water goes; SPH tells you what it breaks.

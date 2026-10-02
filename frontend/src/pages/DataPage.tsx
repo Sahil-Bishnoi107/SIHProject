@@ -51,7 +51,8 @@ export default function DataPage({ system }: { system: any }) {
 
   return (
     <div className="page">
-      <h1><Database size={18} /> Data & system</h1>
+      <div className="page-inner">
+      <div className="page-head"><div><h1>Data & system</h1><div className="subtitle">Terrain, exposure layers and the dam register used by every simulation</div></div></div>
       <div className="grid-2">
         <div className="card stack">
           <h2>Digital elevation models</h2>
@@ -124,6 +125,7 @@ export default function DataPage({ system }: { system: any }) {
         <h2>System</h2>
         <pre className="code">{JSON.stringify(system, null, 2)}</pre>
         <p className="faint">API docs: <a href="/swagger" target="_blank" rel="noreferrer">/swagger</a> · WMS: <a href="/wms?REQUEST=GetCapabilities" target="_blank" rel="noreferrer">/wms</a></p>
+      </div>
       </div>
     </div>
   )

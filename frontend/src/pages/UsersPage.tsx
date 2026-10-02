@@ -17,7 +17,8 @@ export default function UsersPage() {
 
   return (
     <div className="page">
-      <h1><Users size={18} /> Users</h1>
+      <div className="page-inner">
+      <div className="page-head"><div><h1>Users</h1><div className="subtitle">Manage who can view, run simulations or administer the system</div></div></div>
       {error && <div className="error-box" role="alert">{error}</div>}
       <div className="card">
         <div className="table-wrap" style={{ maxHeight: 'none' }}>
@@ -47,6 +48,7 @@ export default function UsersPage() {
           </table>
         </div>
         <p className="faint">You can't change your own role or disable yourself, so there is always at least one admin.</p>
+      </div>
       </div>
     </div>
   )

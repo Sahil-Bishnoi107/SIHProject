@@ -47,13 +47,18 @@ export default function ValidationPage() {
 
   return (
     <div className="page">
-      <h1>Validation scoreboard</h1>
-      <p className="muted" style={{ margin: 0 }}>Three levels of proof: exact analytic solutions, a classic benchmark, and a real event against satellite observations.</p>
+      <div className="page-inner">
+      <div className="page-head">
+        <div>
+          <h1>Validation</h1>
+          <div className="subtitle">Three levels of evidence that the model is right: exact textbook solutions, a historical benchmark, and real floods seen by satellite.</div>
+        </div>
+      </div>
 
       <div className="grid-3">
         {board?.analytic?.map((a: any) => (
           <div key={a.test} className="card">
-            <div className="row spread"><h2>{a.test}</h2><CheckCircle2 size={18} color={a.l1 < 0.05 ? '#22c55e' : '#f59e0b'} /></div>
+            <div className="row spread"><h2>{a.test}</h2><CheckCircle2 size={18} color={a.l1 < 0.05 ? '#16a34a' : '#d97706'} /></div>
             <div className="stats" style={{ marginTop: 8 }}>
               <div className="stat"><div className="label">rel. L1</div><div className="value">{(a.l1 * 100).toFixed(2)}%</div></div>
               <div className="stat"><div className="label">rel. L2</div><div className="value">{(a.l2 * 100).toFixed(2)}%</div></div>
@@ -63,7 +68,7 @@ export default function ValidationPage() {
         ))}
         {board?.sph && (
           <div className="card">
-            <div className="row spread"><h2>SPH vs Ritter front</h2><CheckCircle2 size={18} color={board.sph.frontRatio > 0.6 ? '#22c55e' : '#f59e0b'} /></div>
+            <div className="row spread"><h2>SPH vs Ritter front</h2><CheckCircle2 size={18} color={board.sph.frontRatio > 0.6 ? '#16a34a' : '#d97706'} /></div>
             <div className="stats" style={{ marginTop: 8 }}>
               <div className="stat"><div className="label">front / ideal</div><div className="value">{(board.sph.frontRatio * 100).toFixed(0)}%</div></div>
               <div className="stat"><div className="label">particles</div><div className="value">{fmt.n(board.sph.particles)}</div></div>
@@ -77,11 +82,11 @@ export default function ValidationPage() {
 
       <div className="grid-2">
         <div className="card">
-          <h3>Level 1 - Ritter dam break (dry bed), t = 8 s</h3>
+          <h3>Level 1 · Ritter dam break (dry bed), t = 8 s</h3>
           {ritter ? <Lines data={profile(ritter)} x="x" xLabel="x (m)" yLabel="depth (m)" lines={[{ key: 'model', name: 'SWE-2D' }, { key: 'exact', name: 'exact', dashed: true, color: '#94a3b8' }]} /> : <Loader2 className="spin" />}
         </div>
         <div className="card">
-          <h3>Level 1 - Stoker dam break (wet bed), t = 8 s</h3>
+          <h3>Level 1 · Stoker dam break (wet bed), t = 8 s</h3>
           {stoker ? <Lines data={profile(stoker)} x="x" xLabel="x (m)" yLabel="depth (m)" lines={[{ key: 'model', name: 'SWE-2D' }, { key: 'exact', name: 'exact', dashed: true, color: '#94a3b8' }]} /> : <Loader2 className="spin" />}
         </div>
       </div>
@@ -102,7 +107,7 @@ export default function ValidationPage() {
       )}
 
       <div className="card stack">
-        <h2>Level 2 - Benchmarks (Malpasset 1959 and others)</h2>
+        <h2>Level 2 · Historical benchmarks (Malpasset 1959 and others)</h2>
         {board?.benchmarks?.length ? board.benchmarks.map((b: any) => (
           <div key={b.name} className="row spread">
             <b>{b.name}</b>
@@ -114,7 +119,7 @@ export default function ValidationPage() {
       </div>
 
       <div className="card stack">
-        <h2>Level 3 - Real event vs satellite (CSI / IoU, F1, POD, FAR)</h2>
+        <h2>Level 3 · Real flood vs satellite (CSI / IoU, F1, POD, FAR)</h2>
         <p className="faint">Export the Sentinel-1 flood extent with <span className="mono">gee/s1_flood_map.py</span> (UN-SPIDER change detection), optionally the JRC permanent-water mask, and compare against a run of the same event.</p>
         <div className="fields three">
           <div className="field">
@@ -158,6 +163,7 @@ export default function ValidationPage() {
         )}
       </div>
       {error && <div className="alert-box">{error}</div>}
+      </div>
     </div>
   )
 }
